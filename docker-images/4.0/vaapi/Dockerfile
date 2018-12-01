@@ -5,7 +5,7 @@
 # https://hub.docker.com/r/jrottenberg/ffmpeg/
 #
 #
-FROM        ubuntu:16.04 AS base
+FROM        ubuntu:18.04 AS base
 
 WORKDIR     /tmp/workdir
 
@@ -21,7 +21,7 @@ ARG        LD_LIBRARY_PATH=/opt/ffmpeg/lib
 ARG        PREFIX=/opt/ffmpeg
 ARG        MAKEFLAGS="-j2"
 
-ENV         FFMPEG_VERSION=4.0.2     \
+ENV         FFMPEG_VERSION=4.0.3     \
             FDKAAC_VERSION=0.1.5      \
             LAME_VERSION=3.99.5       \
             LIBASS_VERSION=0.13.7     \
@@ -40,7 +40,7 @@ ENV         FFMPEG_VERSION=4.0.2     \
             FONTCONFIG_VERSION=2.12.4 \
             LIBVIDSTAB_VERSION=1.1.0  \
             KVAZAAR_VERSION=1.2.0     \
-            AOM_VERSION=master        \
+            AOM_VERSION=v1.0.0        \
             SRC=/usr/local
 
 ARG         OGG_SHA256SUM="e19ee34711d7af328cb26287f4137e70630e7261b17cbe3cd41011d73a654692  libogg-1.3.2.tar.gz"
@@ -224,7 +224,7 @@ RUN  \
         DIR=/tmp/freetype && \
         mkdir -p ${DIR} && \
         cd ${DIR} && \
-        curl -sLO http://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.gz && \
+        curl -sLO https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.gz && \
         echo ${FREETYPE_SHA256SUM} | sha256sum --check && \
         tar -zx --strip-components=1 -f freetype-${FREETYPE_VERSION}.tar.gz && \
         ./configure --prefix="${PREFIX}" --disable-static --enable-shared && \
@@ -296,24 +296,31 @@ RUN \
         rm -rf ${DIR}
 
 RUN \
-        dir=/tmp/aom ; \
-        mkdir -p ${dir} ; \
-        cd ${dir} ; \
-        curl -sLO https://aomedia.googlesource.com/aom/+archive/${AOM_VERSION}.tar.gz ; \
-        tar -zx -f ${AOM_VERSION}.tar.gz ; \
+	DIR=/tmp/aom && \
+        git clone --branch ${AOM_VERSION} --depth 1 https://aomedia.googlesource.com/aom ${DIR} ; \
+        cd ${DIR} ; \
         rm -rf CMakeCache.txt CMakeFiles ; \
         mkdir -p ./aom_build ; \
         cd ./aom_build ; \
         cmake -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 ..; \
         make ; \
         make install ; \
-        rm -rf ${dir}
+        rm -rf ${DIR}
 
 ## ffmpeg https://ffmpeg.org/
 RUN  \
-        DIR=$(mktemp -d) && cd ${DIR} && \
+        DIR=/tmp/ffmpeg && mkdir -p ${DIR} && cd ${DIR} && \
         curl -sLO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 && \
-        tar -jx --strip-components=1 -f ffmpeg-${FFMPEG_VERSION}.tar.bz2 && \
+        tar -jx --strip-components=1 -f ffmpeg-${FFMPEG_VERSION}.tar.bz2
+
+RUN \
+        DIR=/tmp/ffmpeg && mkdir -p ${DIR} && cd ${DIR} && \
+	curl -sLO https://github.com/FFmpeg/FFmpeg/commit/b69ea742ab23ad74b2ae2772764743642212a139.patch && \
+	git apply b69ea742ab23ad74b2ae2772764743642212a139.patch
+
+
+RUN \
+        DIR=/tmp/ffmpeg && mkdir -p ${DIR} && cd ${DIR} && \
         ./configure \
         --disable-debug \
         --disable-doc \
@@ -374,7 +381,7 @@ COPY --from=build /usr/local /usr/local/
 
 RUN \
 	apt-get update -y && \
-	apt-get install -y --no-install-recommends libva-drm1 libva1 && \
+	apt-get install -y --no-install-recommends libva-drm2 libva2 i965-va-driver && \
 	rm -rf /var/lib/apt/lists/*
 
 # Let's make sure the app built correctly

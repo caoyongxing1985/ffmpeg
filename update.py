@@ -13,6 +13,7 @@ VARIANTS = ['ubuntu', 'alpine', 'centos', 'scratch', 'vaapi']
 FFMPEG_RELEASES = 'https://ffmpeg.org/releases/'
 
 travis = []
+azure = []
 response = urllib2.urlopen(FFMPEG_RELEASES)
 ffmpeg_releases = response.read()
 
@@ -47,10 +48,12 @@ for version in keep_version:
             dockerfile = 'docker-images/%s/%s/Dockerfile' % (
                 version, variant)
             travis.append(' - VERSION=%s VARIANT=%s' % (version, variant))
+            azure.append('      %s_%s:\n        VERSION: %s\n        VARIANT: %s' % (version.replace('.', '_'), variant, version, variant))
         else:
             dockerfile = 'docker-images/%s/%s/Dockerfile' % (
                 version[0:3], variant)
             travis.append(' - VERSION=%s VARIANT=%s' % (version[0:3], variant))
+            azure.append('      %s_%s:\n        VERSION: %s\n        VARIANT: %s' % (version[0:3].replace('.', '_'), variant, version[0:3], variant))
 
         with open('templates/Dockerfile-env', 'r') as tmpfile:
             env_content = tmpfile.read()
@@ -70,6 +73,19 @@ for version in keep_version:
         if (version == 'snapshot' or version[0] >= '3') and variant == 'vaapi':
             docker_content = docker_content.replace('--disable-ffplay', '--disable-ffplay \\\n        --enable-vaapi')
 
+        # FFmpeg 3.2 and earlier don't compile correctly on Ubuntu 18.04 due to openssl issues
+        if variant == 'vaapi' and (version[0] < '3' or (version[0] == '3' and version[2] < '3')):
+            docker_content = docker_content.replace('ubuntu:18.04', 'ubuntu:16.04')
+            docker_content = docker_content.replace('libva-drm2', 'libva-drm1')
+            docker_content = docker_content.replace('libva2', 'libva1')
+
+        patch = ''
+        if version[0:3] == '4.0':
+            with open('templates/Dockerfile-patch-4.0', 'r') as tmpfile:
+                patch = tmpfile.read()
+
+        docker_content = docker_content.replace('%%FFMPEG_PATCH%%', patch)
+
         d = os.path.dirname(dockerfile)
         if not os.path.exists(d):
             os.makedirs(d)
@@ -85,3 +101,11 @@ travis = template.replace('%%VERSIONS%%', '\n'.join(travis))
 
 with open('.travis.yml', 'w') as travisfile:
     travisfile.write(travis)
+
+with open('templates/azure.template', 'r') as tmpfile:
+    template = tmpfile.read()
+azure = template.replace('%%VERSIONS%%', '\n'.join(azure))
+
+
+with open('azure-pipelines.yml', 'w') as azurefile:
+    azurefile.write(azure)

@@ -1,10 +1,17 @@
 # ffmpeg - http://ffmpeg.org/download.html
 #
+# From https://trac.ffmpeg.org/wiki/CompilationGuide/Centos
+#
 # https://hub.docker.com/r/jrottenberg/ffmpeg/
 #
 #
+FROM    centos:7 AS base
 
-FROM        alpine:3.5
+RUN     yum -y install libgomp && \
+        yum clean all;
+
+
+FROM        base AS build
 
 WORKDIR     /tmp/workdir
 
@@ -13,7 +20,7 @@ ARG        LD_LIBRARY_PATH=/opt/ffmpeg/lib
 ARG        PREFIX=/opt/ffmpeg
 ARG        MAKEFLAGS="-j2"
 
-ENV         FFMPEG_VERSION=4.0.1     \
+ENV         FFMPEG_VERSION=4.1     \
             FDKAAC_VERSION=0.1.5      \
             LAME_VERSION=3.99.5       \
             LIBASS_VERSION=0.13.7     \
@@ -32,7 +39,7 @@ ENV         FFMPEG_VERSION=4.0.1     \
             FONTCONFIG_VERSION=2.12.4 \
             LIBVIDSTAB_VERSION=1.1.0  \
             KVAZAAR_VERSION=1.2.0     \
-            AOM_VERSION=master        \
+            AOM_VERSION=v1.0.0        \
             SRC=/usr/local
 
 ARG         OGG_SHA256SUM="e19ee34711d7af328cb26287f4137e70630e7261b17cbe3cd41011d73a654692  libogg-1.3.2.tar.gz"
@@ -48,27 +55,25 @@ ARG         FRIBIDI_SHA256SUM="3fc96fa9473bd31dcb5500bdf1aa78b337ba13eb8c301e7c2
 
 RUN     buildDeps="autoconf \
                    automake \
-                   bash \
-                   binutils \
                    bzip2 \
                    cmake \
-                   curl \
-                   coreutils \
-                   diffutils \
-                   expat-dev \
-                   file \
-                   g++ \
+                   expat-devel \
                    gcc \
+                   gcc-c++ \
+                   git \
                    gperf \
                    libtool \
                    make \
-                   python \
-                   openssl-dev \
+                   nasm \
+                   perl \
+                   openssl-devel \
                    tar \
                    yasm \
-                   zlib-dev" && \
-        apk  add --update ${buildDeps} libgcc libstdc++ ca-certificates libcrypto1.0 libssl1.0
-
+                   which \
+                   zlib-devel" && \
+        echo "${SRC}/lib" > /etc/ld.so.conf.d/libc.conf && \
+        yum --enablerepo=extras install -y epel-release && \
+        yum install -y ${buildDeps}
 ## opencore-amr https://sourceforge.net/projects/opencore-amr/
 RUN \
         DIR=/tmp/opencore-amr && \
@@ -160,7 +165,7 @@ RUN \
         cd ${DIR} && \
         curl -sL https://codeload.github.com/webmproject/libvpx/tar.gz/v${VPX_VERSION} | \
         tar -zx --strip-components=1 && \
-        ./configure --prefix="${PREFIX}" --enable-vp8 --enable-vp9 --enable-pic --enable-shared \
+        ./configure --prefix="${PREFIX}" --enable-vp8 --enable-vp9 --enable-vp9-highbitdepth --enable-pic --enable-shared \
         --disable-debug --disable-examples --disable-docs --disable-install-bins  && \
         make && \
         make install && \
@@ -217,7 +222,7 @@ RUN  \
         DIR=/tmp/freetype && \
         mkdir -p ${DIR} && \
         cd ${DIR} && \
-        curl -sLO http://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.gz && \
+        curl -sLO https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.gz && \
         echo ${FREETYPE_SHA256SUM} | sha256sum --check && \
         tar -zx --strip-components=1 -f freetype-${FREETYPE_VERSION}.tar.gz && \
         ./configure --prefix="${PREFIX}" --disable-static --enable-shared && \
@@ -289,24 +294,27 @@ RUN \
         rm -rf ${DIR}
 
 RUN \
-        dir=/tmp/aom ; \
-        mkdir -p ${dir} ; \
-        cd ${dir} ; \
-        curl -sLO https://aomedia.googlesource.com/aom/+archive/${AOM_VERSION}.tar.gz ; \
-        tar -zx -f ${AOM_VERSION}.tar.gz ; \
+	DIR=/tmp/aom && \
+        git clone --branch ${AOM_VERSION} --depth 1 https://aomedia.googlesource.com/aom ${DIR} ; \
+        cd ${DIR} ; \
         rm -rf CMakeCache.txt CMakeFiles ; \
         mkdir -p ./aom_build ; \
         cd ./aom_build ; \
         cmake -DCMAKE_INSTALL_PREFIX="${PREFIX}" -DBUILD_SHARED_LIBS=1 ..; \
         make ; \
         make install ; \
-        rm -rf ${dir}
+        rm -rf ${DIR}
 
 ## ffmpeg https://ffmpeg.org/
 RUN  \
-        DIR=$(mktemp -d) && cd ${DIR} && \
+        DIR=/tmp/ffmpeg && mkdir -p ${DIR} && cd ${DIR} && \
         curl -sLO https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2 && \
-        tar -jx --strip-components=1 -f ffmpeg-${FFMPEG_VERSION}.tar.bz2 && \
+        tar -jx --strip-components=1 -f ffmpeg-${FFMPEG_VERSION}.tar.bz2
+
+
+
+RUN \
+        DIR=/tmp/ffmpeg && mkdir -p ${DIR} && cd ${DIR} && \
         ./configure \
         --disable-debug \
         --disable-doc \
@@ -332,7 +340,7 @@ RUN  \
         --enable-openssl \
         --enable-libfdk_aac \
         --enable-libkvazaar \
-        --enable-libaom --extra-libs=-lpthread \
+        \
         --enable-postproc \
         --enable-small \
         --enable-version3 \
@@ -349,10 +357,20 @@ RUN  \
         cp qt-faststart ${PREFIX}/bin
 
 RUN \
-        mkdir -p /tmp/fakeroot/lib  && \
-        ldd ${PREFIX}/bin/ffmpeg | cut -d ' ' -f 3 | strings | xargs -I R cp R /tmp/fakeroot/lib/ && \
-        for lib in /tmp/fakeroot/lib/*; do strip --strip-all $lib; done && \
-        cp -r ${PREFIX}/bin /tmp/fakeroot/bin/ && \
-        cp -r ${PREFIX}/share/ffmpeg /tmp/fakeroot/share/ && \
-        LD_LIBRARY_PATH=/tmp/fakeroot/lib /tmp/fakeroot/bin/ffmpeg -buildconf
+        ldd ${PREFIX}/bin/ffmpeg | grep opt/ffmpeg | cut -d ' ' -f 3 | xargs -i cp {} /usr/local/lib64/ && \
+        cp ${PREFIX}/bin/* /usr/local/bin/ && \
+        cp -r ${PREFIX}/share/ffmpeg /usr/local/share/ && \
+        LD_LIBRARY_PATH=/usr/local/lib64 ffmpeg -buildconf
 
+FROM        base
+MAINTAINER  Julien Rottenberg <julien@rottenberg.info>
+
+CMD         ["--help"]
+ENTRYPOINT  ["ffmpeg"]
+
+ENV LD_LIBRARY_PATH=/usr/local/lib64
+
+COPY --from=build /usr/local/ /usr/local/
+
+# Let's make sure the app built correctly
+# Convenient to verify on https://hub.docker.com/r/jrottenberg/ffmpeg/builds/ console output

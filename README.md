@@ -3,6 +3,7 @@ FFmpeg Docker image
 
  [![Docker Stars](https://img.shields.io/docker/stars/jrottenberg/ffmpeg.svg?style=plastic)](https://registry.hub.docker.com/v2/repositories/jrottenberg/ffmpeg/stars/count/) [![Docker pulls](https://img.shields.io/docker/pulls/jrottenberg/ffmpeg.svg?style=plastic)](https://registry.hub.docker.com/v2/repositories/jrottenberg/ffmpeg/)
 [![Travis](https://img.shields.io/travis/jrottenberg/ffmpeg/master.svg?maxAge=300?style=plastic)](https://travis-ci.org/jrottenberg/ffmpeg)
+[![Build Status](https://dev.azure.com/video-tools/ffmpeg/_apis/build/status/jrottenberg.ffmpeg)](https://dev.azure.com/video-tools/ffmpeg/_build/latest?definitionId=1)
 [![Docker Automated build](https://img.shields.io/docker/automated/jrottenberg/ffmpeg.svg?maxAge=2592000?style=plastic)](https://github.com/jrottenberg/ffmpeg/)
 
 This project prepares a minimalist Docker image with FFmpeg. It compiles FFmpeg from sources following instructions from the [Compilation Guide](https://trac.ffmpeg.org/wiki/CompilationGuide).
@@ -23,15 +24,34 @@ You'll find centos based image using `ffmpeg:X.Y-centos` or `ffmpeg:centos` to g
 alpine images  `ffmpeg:X.Y-alpine` to get the latest.
 scratch images `ffmpeg:X.Y-scratch` to get the latest. (Scratch is an experimental image containing only FFmpeg and libraries)
 
-For information :
+Recent images:
 
 ```
-centos-3.3          centos              28221bb909aa        About an hour ago    264MB
-ubuntu-3.3          ubuntu              d6b632a4fe7f        3 seconds ago        221MB
-alpine-3.3          alpine              725234fc4162        40 minutes ago       65.6MB
-scratch-3.3         scratch             34724534bb88        15 minutes ago       48.6MB
+vaapi               86mb    2018-08-16
+snapshot-centos     95mb    2018-08-16
+snapshot-alpine     27mb    2018-08-16
+4.0-vaapi           86mb    2018-08-15
+4.0-ubuntu          94mb    2018-08-16
+4.0-scratch         20mb    2018-08-16
+4.0-centos          95mb    2018-08-16
+3.4-vaapi           84mb    2018-08-15
+3.4-scratch         18mb    2018-08-16
+3.4-alpine          24mb    2018-08-16
+3.4                 92mb    2018-08-16
+3.3-scratch         17mb    2018-08-04
+3.2-scratch         17mb    2018-08-16
+3.2-alpine          24mb    2018-08-16
+3.0-scratch         17mb    2018-08-16
+3.0-centos          94mb    2018-08-16
+2.8-scratch         16mb    2018-08-16
+2.8                 90mb    2018-08-16
 ```
 
+<details><summary>(How the 'recent images' was generated)</summary>
+```
+    $ curl --silent https://hub.docker.com/v2/repositories/jrottenberg/ffmpeg/tags/?page_size=500 | jq -cr ".results|sort_by(.name)|reverse[]|.sz=(.full_size/1048576|floor|tostring+\"mb\")|[.name,( (20-(.name|length))*\" \" ),.sz,( (8-(.sz|length))*\" \"),.last_updated[:10]]|@text|gsub(\"[,\\\"\\\]\\\[]\";null)" | grep 2018-08
+```
+</details>
 
 Please use [Github issues](https://github.com/jrottenberg/ffmpeg/issues/new) to report any bug or missing feature.
 

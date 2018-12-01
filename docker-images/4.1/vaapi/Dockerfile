@@ -1,26 +1,27 @@
 # ffmpeg - http://ffmpeg.org/download.html
 #
-# From https://trac.ffmpeg.org/wiki/CompilationGuide/Centos
+# From https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu
 #
 # https://hub.docker.com/r/jrottenberg/ffmpeg/
 #
 #
-FROM    centos:7 AS base
-
-RUN     yum -y install libgomp && \
-        yum clean all;
-
-
-FROM        base AS build
+FROM        ubuntu:18.04 AS base
 
 WORKDIR     /tmp/workdir
+
+RUN     apt-get -yqq update && \
+        apt-get install -yq --no-install-recommends ca-certificates expat libgomp1 && \
+        apt-get autoremove -y && \
+        apt-get clean -y
+
+FROM base as build
 
 ARG        PKG_CONFIG_PATH=/opt/ffmpeg/lib/pkgconfig
 ARG        LD_LIBRARY_PATH=/opt/ffmpeg/lib
 ARG        PREFIX=/opt/ffmpeg
 ARG        MAKEFLAGS="-j2"
 
-ENV         FFMPEG_VERSION=2.8.15     \
+ENV         FFMPEG_VERSION=4.1     \
             FDKAAC_VERSION=0.1.5      \
             LAME_VERSION=3.99.5       \
             LIBASS_VERSION=0.13.7     \
@@ -53,27 +54,28 @@ ARG         LIBASS_SHA256SUM="8fadf294bf701300d4605e6f1d92929304187fca4b8d8a4788
 ARG         FRIBIDI_SHA256SUM="3fc96fa9473bd31dcb5500bdf1aa78b337ba13eb8c301e7c28923fea982453a8  0.19.7.tar.gz"
 
 
-RUN     buildDeps="autoconf \
-                   automake \
-                   bzip2 \
-                   cmake \
-                   expat-devel \
-                   gcc \
-                   gcc-c++ \
-                   git \
-                   gperf \
-                   libtool \
-                   make \
-                   nasm \
-                   perl \
-                   openssl-devel \
-                   tar \
-                   yasm \
-                   which \
-                   zlib-devel" && \
-        echo "${SRC}/lib" > /etc/ld.so.conf.d/libc.conf && \
-        yum --enablerepo=extras install -y epel-release && \
-        yum install -y ${buildDeps}
+RUN      buildDeps="autoconf \
+                    automake \
+                    cmake \
+                    curl \
+                    bzip2 \
+                    libexpat1-dev \
+                    g++ \
+                    gcc \
+                    git \
+                    gperf \
+                    libtool \
+                    make \
+                    nasm \
+                    perl \
+                    pkg-config \
+                    python \
+                    libssl-dev \
+                    yasm \
+                    libva-dev \
+                    zlib1g-dev" && \
+        apt-get -yqq update && \
+        apt-get install -yq --no-install-recommends ${buildDeps}
 ## opencore-amr https://sourceforge.net/projects/opencore-amr/
 RUN \
         DIR=/tmp/opencore-amr && \
@@ -319,6 +321,7 @@ RUN \
         --disable-debug \
         --disable-doc \
         --disable-ffplay \
+        --enable-vaapi \
         --enable-shared \
         --enable-avresample \
         --enable-libopencore-amrnb \
@@ -328,7 +331,7 @@ RUN \
         --enable-libfreetype \
         --enable-libvidstab \
         --enable-libmp3lame \
-         \
+        --enable-libopenjpeg \
         --enable-libopus \
         --enable-libtheora \
         --enable-libvorbis \
@@ -339,7 +342,7 @@ RUN \
         --enable-nonfree \
         --enable-openssl \
         --enable-libfdk_aac \
-         \
+        --enable-libkvazaar \
         \
         --enable-postproc \
         --enable-small \
@@ -356,21 +359,26 @@ RUN \
         make qt-faststart && \
         cp qt-faststart ${PREFIX}/bin
 
+## cleanup
 RUN \
-        ldd ${PREFIX}/bin/ffmpeg | grep opt/ffmpeg | cut -d ' ' -f 3 | xargs -i cp {} /usr/local/lib64/ && \
+        ldd ${PREFIX}/bin/ffmpeg | grep opt/ffmpeg | cut -d ' ' -f 3 | xargs -i cp {} /usr/local/lib/ && \
         cp ${PREFIX}/bin/* /usr/local/bin/ && \
         cp -r ${PREFIX}/share/ffmpeg /usr/local/share/ && \
-        LD_LIBRARY_PATH=/usr/local/lib64 ffmpeg -buildconf
+        LD_LIBRARY_PATH=/usr/local/lib ffmpeg -buildconf
 
-FROM        base
+FROM        base AS release
 MAINTAINER  Julien Rottenberg <julien@rottenberg.info>
 
 CMD         ["--help"]
 ENTRYPOINT  ["ffmpeg"]
+ENV         LD_LIBRARY_PATH=/usr/local/lib
 
-ENV LD_LIBRARY_PATH=/usr/local/lib64
+COPY --from=build /usr/local /usr/local/
 
-COPY --from=build /usr/local/ /usr/local/
+RUN \
+	apt-get update -y && \
+	apt-get install -y --no-install-recommends libva-drm2 libva2 i965-va-driver && \
+	rm -rf /var/lib/apt/lists/*
 
 # Let's make sure the app built correctly
 # Convenient to verify on https://hub.docker.com/r/jrottenberg/ffmpeg/builds/ console output
